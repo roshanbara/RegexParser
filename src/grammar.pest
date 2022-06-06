@@ -1,0 +1,9 @@
+Regex = {E0 | Exp}
+E0 = {Exp~Exp}
+Exp = {Star | Concat | Or | Letter}
+Star = {"(" ~ Exp ~ ")" ~ "*" | Letter ~ "*"}
+Or = {"(" ~ Exp ~ "|" ~ Exp ~ ")" | E1 ~ "|" ~ Exp}
+E1 = {Concat | Letter}
+Concat = {Letter ~ Exp}
+Letter = {'a'..'z' | 'A'..'Z' | '0'..'9'}
+WHITESPACE = _{" "}
