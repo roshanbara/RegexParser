@@ -1,9 +1,10 @@
-Regex = {E0 | Exp}
-E0 = {Exp~Exp}
-Exp = {Star | Concat | Or | Letter}
-Star = {"(" ~ Exp ~ ")" ~ "*" | Letter ~ "*"}
-Or = {"(" ~ Exp ~ "|" ~ Exp ~ ")" | E1 ~ "|" ~ Exp}
-E1 = {Concat | Letter}
-Concat = {Letter ~ Exp}
+Regex = { Or | T0 }
+Or = { T0 ~ "|" ~ Regex}
+T0 = { Concat | T1 }
+Concat = { T1 ~ T0 }
+T1 = { Star | T2 }
+Star = { T2 ~ "*" }
+T2 = { Paren | Letter }
+Paren = { "(" ~ Regex ~ ")" }
 Letter = {'a'..'z' | 'A'..'Z' | '0'..'9'}
 WHITESPACE = _{" "}

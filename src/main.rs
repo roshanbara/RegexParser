@@ -3,10 +3,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::collections::HashSet;
 use std::str;
-// use std::string;
+use std::io;
 
-
-// #![allow(non_snake_case)]
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
@@ -28,6 +26,7 @@ pub enum Regex {
 
 use crate::Regex::{Empty, Eps, Letter, Or, Concat, Star};
 
+// Finds whether a regular expression is nullable
 fn findLambda (regexp: &Rc<Regex>) -> Rc<Regex> {
     match regexp.deref() {
         Empty() => Rc::new(Empty()),
@@ -55,6 +54,7 @@ fn findLambda (regexp: &Rc<Regex>) -> Rc<Regex> {
     }
 }
 
+// Finds P set : all the starting letters possible in the language of the regular expression
 fn constructP (regexp: &Rc<Regex>) -> HashSet<String> {
     match regexp.deref() {
         Or(r1, r2)  => {
@@ -109,6 +109,7 @@ fn constructP (regexp: &Rc<Regex>) -> HashSet<String> {
     }
 }
 
+// Finds D set : all the terminating letters possible in the language of the regular expression
 fn constructD (regexp: &Rc<Regex>) -> HashSet<String> {
     match regexp.deref() {
         Or(r1, r2)  => {
@@ -162,7 +163,7 @@ fn constructD (regexp: &Rc<Regex>) -> HashSet<String> {
 
     }
 }
-
+// Finds F set : all the letter-pairs possible in the language of the regular expression
 fn constructF (regexp: &Rc<Regex>) -> HashSet<(String, String)> {
     match regexp.deref() {
         Or(r1, r2)  => {
@@ -256,10 +257,11 @@ fn constructF (regexp: &Rc<Regex>) -> HashSet<(String, String)> {
     }
 }
 
+// Checks whether a state is a final state
 fn checkstate (curr: usize, final_states: &HashSet<String>) -> bool {
     let mut res = false;
     for x in final_states {
-        // println!("Curr state: {}, Final State: {}", curr.to_string(), x);
+        // println!("Final State: {}", x);
         if  x[1..].parse::<usize>().unwrap() == curr {
             res = true;
             break;
@@ -268,6 +270,7 @@ fn checkstate (curr: usize, final_states: &HashSet<String>) -> bool {
     res
 }
 
+// Checks string against a regular expression by executing the Glushkov-NFA
 fn checkstr(s: &str, nfa: &Vec<Vec<u8>>, final_states: &HashSet<String>, curr: usize, idx: usize, states: u8, state_letter: &Vec<char>) -> bool {
     let mut res = false;
     let mut next_state = 0;
@@ -283,7 +286,7 @@ fn checkstr(s: &str, nfa: &Vec<Vec<u8>>, final_states: &HashSet<String>, curr: u
             break;
         }
         if nfa[curr][next_state] == 1 && (s.chars().nth(idx).unwrap() == state_letter[next_state-1]) {
-            println!("Char encounterd: {}, Going to State: {}", s.chars().nth(idx).unwrap(), next_state);
+            println!("Char encountered: {}, Going to State: {}", s.chars().nth(idx).unwrap(), next_state);
             res = res || checkstr(s, &nfa, &final_states, next_state, idx+1, states, &state_letter);
         }
         if res {
@@ -294,6 +297,7 @@ fn checkstr(s: &str, nfa: &Vec<Vec<u8>>, final_states: &HashSet<String>, curr: u
     res
 }
 
+// Generates the augmented regular expression e' from given regular expression e
 fn augment(regexp: &Rc<Regex>, cnt: &mut u8) -> Rc<Regex> {
     match regexp.deref() {
         Letter(a) => {
@@ -313,6 +317,7 @@ fn augment(regexp: &Rc<Regex>, cnt: &mut u8) -> Rc<Regex> {
     }
 }
 
+// Counts number of states in the generated NFA
 fn findstates(regexp: &Rc<Regex>, cnt: &mut u8) -> u8 {
     match regexp.deref() {
         Letter(_) => {
@@ -334,6 +339,7 @@ fn findstates(regexp: &Rc<Regex>, cnt: &mut u8) -> u8 {
     }
 }
 
+// Generates a Vector of char of the letter labelled states
 fn addstates(regexp: &Rc<Regex>, state_letter: &mut Vec<char>) {
     match regexp.deref() {
         Letter(a) => {
@@ -353,34 +359,99 @@ fn addstates(regexp: &Rc<Regex>, state_letter: &mut Vec<char>) {
     }
 }
 
+// Parses a given pair to AST
+fn parse_to_AST(token: &pest::iterators::Pair<Rule>) -> Rc<Regex> {
+    let mut tmp0 = token.clone().into_inner();
+    // println!("Yes : {:#?}", token);
+    match token.as_rule() {
+        Rule::Regex   => {
+            // println!("in Exp");
+            parse_to_AST(&tmp0.next().unwrap())
+        },
+        Rule::Or=> {
+            // println!("Concat - ");
+            let r1 = parse_to_AST(&tmp0.next().unwrap());
+            let r2 = parse_to_AST(&tmp0.next().unwrap());
+            Rc::new(Or(r1, r2))
+        },
+        Rule::T0    => {
+            // println!("in T0 ");
+            parse_to_AST(&tmp0.next().unwrap())
+        },
+        Rule::Concat=> {
+            // println!("Concat - ");
+            let r1 = parse_to_AST(&tmp0.next().unwrap());
+            let r2 = parse_to_AST(&tmp0.next().unwrap());
+            Rc::new(Concat(r1, r2))
+        },
+        Rule::T1    => {
+            // println!("in T1 ");
+            parse_to_AST(&tmp0.next().unwrap())
+        },
+        Rule::Star  => {
+            // println!("Star - ");
+            Rc::new(Star(parse_to_AST(&tmp0.next().unwrap())))
+        },
+        Rule::T2    => {
+            // println!("in T2 ");
+            parse_to_AST(&tmp0.next().unwrap())
+        },
+        Rule::Paren    => {
+            // println!("in Paren ");
+            parse_to_AST(&tmp0.next().unwrap())
+        },
+        Rule::Letter=> Rc::new(Letter(token.as_str().to_string())),
+        _ => {
+            println!("Empty Generated");
+            Rc::new(Empty())
+        }
+    }
+}
+
+
 fn main() {
-    // let x = Rc::new(Or(Rc::new(Concat(Rc::new(Letter(2)),Rc::new(Concat(Rc::new(Star(Rc::new(Letter(1)))), Rc::new(Letter(2)))))), Rc::new(Concat(Rc::new(Letter(2)), Rc::new(Star(Rc::new(Concat(Rc::new(Letter(2)), Rc::new(Letter(1))))))))));
-    // let x = Rc::new(Concat(Rc::new(Concat(Rc::new(Letter(1)),Rc::new(Star(Rc::new(Letter(3)))))), Rc::new(Letter(2))));
-    let mut pairs = RegEx::parse(Rule::Regex, "a(b|c|d)*2").unwrap_or_else(|e| panic!("{}", e));
+
+    println!("Enter a RegEx:");
+    let mut tmp1 = String::new();
+    io::stdin().read_line(&mut tmp1).expect("failed to readline");
+    let regex_input = tmp1.trim();
+    // let regex_input = "a(bc | cd | ef)*";
+
+    println!("Enter a string:");
+    let mut tmp2 = String::new();
+    io::stdin().read_line(&mut tmp2).expect("failed to readline");
+    let s: &str= tmp2.trim();
+    // let s: &str = "abccdcd";
+    
+    // Generate pair for the regex
+    let mut pairs = RegEx::parse(Rule::Regex, regex_input).unwrap_or_else(|e| panic!("{}", e));
+    
+    // Parse the pair to an AST
     let x = parse_to_AST(&pairs.next().unwrap());
 
     // println!("Hello: {:?}", x);
+    
     let mut cnt = 1;
     let a = augment(&x, &mut cnt); 
-    // let a = Rc::new(Or(Rc::new(Concat(Rc::new(Letter(12)),Rc::new(Concat(Rc::new(Star(Rc::new(Letter(21)))), Rc::new(Letter(32)))))), Rc::new(Concat(Rc::new(Letter(42)), Rc::new(Star(Rc::new(Concat(Rc::new(Letter(52)), Rc::new(Letter(61))))))))));
+    
+    // Generate P, D, F sets
     let P_set = constructP(&a);
     let D_set = constructD(&a);
     let F_set = constructF(&a);
+
+    // Finding Number of states with initial value 1 being for Start State
     let mut init_states: u8 = 1;
     let no_of_states = findstates(&a, &mut init_states);
+
     let width:usize = no_of_states.into();
     let height:usize = no_of_states.into();
     
+    // Getting the letter labels for states
     let mut state_letter: Vec<char> = Vec::new();
     addstates(&a, &mut state_letter);
 
-    println!("Pset = {:?}", P_set);
-    println!("Dset = {:?}", D_set);
-    println!("Fset = {:?}", F_set);
-    println!("States = {}", no_of_states);
-    println!("States = {:?}", state_letter);
-
-
+    
+    // Generating the NFA in the form of Adjacency Matrix
     let mut array = vec![vec![0; width]; height];
     for x in &P_set {
         array[0][x[1..].parse::<usize>().unwrap()] = 1 as u8;
@@ -388,11 +459,14 @@ fn main() {
     for x in &F_set {
         array[x.0[1..].parse::<usize>().unwrap()][x.1[1..].parse::<usize>().unwrap()] = 1 as u8;
     }
-    println!("P: {:?}", P_set);
-    println!("D: {:?}", D_set);
-    println!("F: {:?}", F_set);
+    
+    println!("Pset = {:?}", P_set);
+    println!("Dset = {:?}", D_set);
+    println!("Fset = {:?}", F_set);
+    println!("Number of States = {}", no_of_states);
+    println!("Letter labels for state = {:?}", state_letter);
     println!("NFA Adjacency Matrix : {:?}", array);
-    let s: &str = "abc2";
+
 
     if s.len() == 0 && matches!(findLambda(&a).deref(), Eps()) {
         println!("Accepted");
@@ -402,52 +476,5 @@ fn main() {
         println!("Accepted");
     } else {
         println!("Rejected");
-    }
-}
-
-fn parse_to_AST(token: &pest::iterators::Pair<Rule>) -> Rc<Regex> {
-    let mut tmp0 = token.clone().into_inner();
-    // println!("Yes : {:#?}", token);
-    match token.as_rule() {
-        Rule::Exp   => {
-            // println!("in Exp");
-            parse_to_AST(&tmp0.next().unwrap())
-        },
-        Rule::Star  => {
-            // println!("Star - ");
-            Rc::new(Star(parse_to_AST(&tmp0.next().unwrap())))
-        },
-        Rule::E1    => {
-            // println!("in E1 ");
-            parse_to_AST(&tmp0.next().unwrap())
-        },
-        Rule::Concat=> {
-            // println!("Concat - ");
-            let r1 = parse_to_AST(&tmp0.next().unwrap());
-            let r2 = parse_to_AST(&tmp0.next().unwrap());
-            Rc::new(Concat(r1, r2))
-            // let tmp1 = tmp0.next().unwrap();
-            // let tmp1 = tmp0.next().unwrap;
-        },
-        Rule::Or=> {
-            // println!("Concat - ");
-            let r1 = parse_to_AST(&tmp0.next().unwrap());
-            let r2 = parse_to_AST(&tmp0.next().unwrap());
-            Rc::new(Or(r1, r2))
-            // let tmp1 = tmp0.next().unwrap();
-            // let tmp1 = tmp0.next().unwrap;
-        },
-        Rule::Letter=> Rc::new(Letter(token.as_str().to_string())),
-        Rule::Regex=> parse_to_AST(&tmp0.next().unwrap()),
-        Rule::E0=> {
-            // println!("E0 concat");
-            let r1 = parse_to_AST(&tmp0.next().unwrap());
-            let r2 = parse_to_AST(&tmp0.next().unwrap());
-            Rc::new(Concat(r1, r2))
-        },
-        _ => {
-            println!("Empty Generated");
-            Rc::new(Empty())
-        }
     }
 }
